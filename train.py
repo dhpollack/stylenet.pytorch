@@ -13,6 +13,8 @@ parser.add_argument('--data-dir', type=str, default=DATADIR,
                     help='batch size')
 parser.add_argument('--epochs', type=int, default=5,
                     help='upper epoch limit')
+parser.add_argument('--num-workers', type=int, default=4,
+                    help='dataloader workers')
 parser.add_argument('--batch-size', type=int, default=10,
                     help='batch size')
 parser.add_argument('--validate', action='store_true',
@@ -32,7 +34,8 @@ ngpu = torch.cuda.device_count()
 print("Using CUDA: {} on {} devices".format(use_cuda, ngpu))
 
 ds = Fashion144kDataset(args.data_dir)
-dl = data.DataLoader(ds, batch_size=args.batch_size, shuffle=False)
+dl = data.DataLoader(ds, batch_size=args.batch_size, num_workers=args.num_workers, 
+                     shuffle=False, drop_last=True)
 
 model = Stylenet(num_classes=ds.n_feats)
 
@@ -50,7 +53,7 @@ for epoch in range(args.epochs):
         model.zero_grad()
         tgts = tgts.float()
         if use_cuda:
-            mb, tgts = mb.cuda(), tgt.cuda()
+            mb, tgts = mb.cuda(), tgts.cuda()
         mb, tgts = Variable(mb), Variable(tgts)
         out = model(mb)
         loss = criterion(out, tgts)

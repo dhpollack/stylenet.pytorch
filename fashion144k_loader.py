@@ -21,7 +21,8 @@ class Fashion144kDataset(data.Dataset):
         ])
 
     def __init__(self, root, trans=None, ttrans=None,
-                 features_type="single"):
+                 features_type="single", preload=False):
+        self.preload = preload
         photosdir = os.path.join(root, "photos")
         manifest = [os.path.join(photosdir, x) for x in os.listdir(photosdir)]
         feat_fp = "feat_sin.npy" if features_type == "single" else "feat_col.npy"
@@ -29,7 +30,10 @@ class Fashion144kDataset(data.Dataset):
         labels = torch.from_numpy(labels.astype(np.int32)).long()
         dummy_cat = torch.zeros((labels.size(0), 1)).long()
         labels = torch.cat((dummy_cat, labels), dim=1)
-        data = [(fp, label) for fp, label in zip(manifest, labels)] # for now using dummy target
+        if preload:
+            data = [(load_image(fp), label) for fp, label in zip(manifest, labels)]
+        else:
+            data = [(fp, label) for fp, label in zip(manifest, labels)]
         self.data = data
         self.n_feats = labels.size(1)
         self.trans = trans if trans is not None else self.T
@@ -42,8 +46,12 @@ class Fashion144kDataset(data.Dataset):
         Returns:
             tuple: (image, target).
         """
-        img_fp, target = self.data[index]
-        img = load_image(img_fp)
+        if not self.preload:
+            img_fp, target = self.data[index]
+            img = load_image(img_fp)
+        else:
+            img, target = self.data[index]
+
         if self.trans is not None:
             img = self.trans(img)
         if self.ttrans is not None:

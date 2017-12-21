@@ -16,22 +16,29 @@ parser.add_argument('--epochs', type=int, default=5,
 parser.add_argument('--batch-size', type=int, default=10,
                     help='batch size')
 parser.add_argument('--validate', action='store_true',
-                    help='do out-of-bag validation')
+                    help='do out-of-sample validation')
 parser.add_argument('--log-interval', type=int, default=5,
                     help='reports per epoch')
 parser.add_argument('--load-model', type=str, default=None,
                     help='path of model to load')
 parser.add_argument('--save-model', action='store_true',
                     help='path to save the final model')
+parser.add_argument('--preload', action='store_true',
+                    help='preload images into memory')
 args = parser.parse_args()
 
 use_cuda = torch.cuda.is_available()
-print("Using CUDA: {}".format(use_cuda))
+ngpu = torch.cuda.device_count()
+print("Using CUDA: {} on {} devices".format(use_cuda, ngpu))
 
 ds = Fashion144kDataset(args.data_dir)
 dl = data.DataLoader(ds, batch_size=args.batch_size, shuffle=False)
 
 model = Stylenet(num_classes=ds.n_feats)
+
+if use_cuda:
+    model = nn.DataParallel(model).cuda() if ngpu > 1 else model.cuda()
+
 model = model.cuda() if use_cuda else model
 
 criterion = nn.BCEWithLogitsLoss()

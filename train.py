@@ -5,9 +5,7 @@ import torch.utils.data as data
 from torch.autograd import Variable
 from model.stylenet import Stylenet
 from fashion144k_loader import Fashion144kDataset
-import csv
-import shutil
-
+from utils import *
 
 DATADIR = "/home/david/Programming/data/Fashion144k_stylenet_v1/"
 
@@ -68,10 +66,6 @@ for epoch in range(args.epochs):
         losses_epoch += [loss.data[0]]
     losses.append(losses_epoch)
 
-with open("train_loss.csv", "w", newline='') as f:
-    writer = csv.writer(f)
-    writer.writerows(losses)
-
 state = {
     'epoch': epoch + 1,
     'state_dict': model.state_dict(),
@@ -79,9 +73,6 @@ state = {
     'optimizer' : optimizer.state_dict(),
 }
 
-save_checkpoint(state, False, "checkpts/stylenet_epoch_{}.pth".format(epoch))
+save_loss_csv(losses, "train_loss.csv")
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
-    torch.save(state, filename)
-    if is_best:
-        shutil.copyfile(filename, 'model_best.pth.tar')
+save_checkpoint(state, False, "checkpts/stylenet_epoch_{}.pth".format(epoch))

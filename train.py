@@ -26,6 +26,8 @@ parser.add_argument('--load-model', type=str, default=None,
                     help='path of model to load')
 parser.add_argument('--save-model', action='store_true',
                     help='path to save the final model')
+parser.add_argument('--feature-extractor', action='store_true',
+                    help='use the more complicated feature extractor network')
 parser.add_argument('--preload', action='store_true',
                     help='preload images into memory')
 args = parser.parse_args()
@@ -38,33 +40,52 @@ ds = Fashion144kDataset(args.data_dir)
 dl = data.DataLoader(ds, batch_size=args.batch_size, num_workers=args.num_workers,
                      shuffle=False, drop_last=True)
 
-model_fe = FENet(num_features=128)
-model_cl = ClassificationNet(num_in_features=128, num_out_classes=ds.n_feats)
+use_fe = args.feature_extractor
+if use_fe:
+    model_fe = FENet(num_features=128)
+    model_cl = ClassificationNet(num_in_features=128, num_out_classes=ds.n_feats)
+else:
+    model = Stylenet(num_classes=ds.n_feats)
 
 if use_cuda:
-    model_fe = nn.DataParallel(model_fe).cuda() if ngpu > 1 else model_fe.cuda()
-    model_cl = nn.DataParallel(model_cl).cuda() if ngpu > 1 else model_cl.cuda()
+    if use_fe:
+        model_fe = nn.DataParallel(model_fe).cuda() if ngpu > 1 else model_fe.cuda()
+        model_cl = nn.DataParallel(model_cl).cuda() if ngpu > 1 else model_cl.cuda()
+    else:
+        model = nn.DataParallel(model).cuda() if ngpu > 1 else model.cuda()
 
 criterion = nn.BCEWithLogitsLoss()
-optimizer = torch.optim.SGD([
-                {'params': model_fe.parameters()},
-                {'params': model_cl.parameters()}
-            ], lr=0.0001, momentum=0.9, nesterov=False)
+if use_fe:
+    optimizer = torch.optim.SGD([
+                    {'params': model_fe.parameters()},
+                    {'params': model_cl.parameters()}
+                ], lr=0.0001, momentum=0.9, nesterov=False)
+else:
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.9, nesterov=False)
 
 losses = []
 for epoch in range(args.epochs):
-    model_fe.train()
-    model_cl.train()
+    if use_fe:
+        model_fe.train()
+        model_cl.train()
+    else:
+        model.train()
     losses_epoch = []
     for mb, tgts in dl:
-        model_fe.zero_grad()
-        model_cl.zero_grad()
+        if use_fe:
+            model_fe.zero_grad()
+            model_cl.zero_grad()
+        else:
+            model.zero_grad()
         tgts = tgts.float()
         if use_cuda:
             mb, tgts = mb.cuda(), tgts.cuda()
         mb, tgts = Variable(mb), Variable(tgts)
-        features = model_fe(mb)
-        out = model_cl(features)
+        if use_fe:
+            features = model_fe(mb)
+            out = model_cl(features)
+        else:
+            out = model(mb)
         loss = criterion(out, tgts)
         print("Loss: {0:.05f}".format(loss.data[0]))
         loss.backward()
@@ -72,13 +93,21 @@ for epoch in range(args.epochs):
         losses_epoch += [loss.data[0]]
     losses.append(losses_epoch)
 
-state = {
-    'epoch': epoch + 1,
-    'state_dict_fe': model_fe.state_dict(),
-    'state_dict_cl': model_cl.state_dict(),
-    'best_prec': None,
-    'optimizer' : optimizer.state_dict(),
-}
+if use_fe:
+    state = {
+        'epoch': epoch + 1,
+        'state_dict_fe': model_fe.state_dict(),
+        'state_dict_cl': model_cl.state_dict(),
+        'best_prec': None,
+        'optimizer' : optimizer.state_dict(),
+    }
+else:
+    state = {
+        'epoch': epoch + 1,
+        'state_dict': model.state_dict(),
+        'best_prec': None,
+        'optimizer' : optimizer.state_dict(),
+    }
 
 save_loss_csv(losses, "train_loss.csv")
 

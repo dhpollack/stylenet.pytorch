@@ -63,6 +63,7 @@ for epoch in range(args.epochs):
         out = model(mb)
         loss = criterion(out, tgts)
         print("Loss: {0:.05f}".format(loss.data[0]))
+        loss.backward()
         optimizer.step()
         losses_epoch += [loss.data[0]]
     losses.append(losses_epoch)

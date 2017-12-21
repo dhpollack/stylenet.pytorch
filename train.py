@@ -5,6 +5,9 @@ import torch.utils.data as data
 from torch.autograd import Variable
 from model.stylenet import Stylenet
 from fashion144k_loader import Fashion144kDataset
+import csv
+import shutil
+
 
 DATADIR = "/home/david/Programming/data/Fashion144k_stylenet_v1/"
 
@@ -34,7 +37,7 @@ ngpu = torch.cuda.device_count()
 print("Using CUDA: {} on {} devices".format(use_cuda, ngpu))
 
 ds = Fashion144kDataset(args.data_dir)
-dl = data.DataLoader(ds, batch_size=args.batch_size, num_workers=args.num_workers, 
+dl = data.DataLoader(ds, batch_size=args.batch_size, num_workers=args.num_workers,
                      shuffle=False, drop_last=True)
 
 model = Stylenet(num_classes=ds.n_feats)
@@ -47,8 +50,10 @@ model = model.cuda() if use_cuda else model
 criterion = nn.BCEWithLogitsLoss()
 optimizer = torch.optim.SGD(model.parameters(), lr=0.0001, momentum=0.9, nesterov=False)
 
+losses = []
 for epoch in range(args.epochs):
     model.train()
+    losses_epoch = []
     for mb, tgts in dl:
         model.zero_grad()
         tgts = tgts.float()
@@ -59,3 +64,23 @@ for epoch in range(args.epochs):
         loss = criterion(out, tgts)
         print("Loss: {0:.05f}".format(loss.data[0]))
         optimizer.step()
+        losses_epoch += [loss.data[0]]
+    losses.append(losses_epoch)
+
+with open("train_loss.csv", "w", newline='') as f:
+    writer = csv.writer(f)
+    writer.writerows(losses)
+
+state = {
+    'epoch': epoch + 1,
+    'state_dict': model.state_dict(),
+    'best_prec': None,
+    'optimizer' : optimizer.state_dict(),
+}
+
+save_checkpoint(state, False, "checkpts/stylenet_epoch_{}.pth".format(epoch))
+
+def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+    torch.save(state, filename)
+    if is_best:
+        shutil.copyfile(filename, 'model_best.pth.tar')
